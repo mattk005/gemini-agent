@@ -1,61 +1,47 @@
+import argparse
 import os
+
 from dotenv import load_dotenv
 from google import genai
-from google.genai.types import GenerateContentResponse
-
-load_dotenv()
-api_key = os.environ.get("GEMINI_API_KEY")
-
-client = genai.Client(api_key=api_key)
+from google.genai import types
+from config import model_name, system_prompt
 
 
-# def promt_decorator(func):
-#     def wrapper(*args,**kwargs):
-#         print(f"User prompt:{args}")
-#         return func(*args,**kwargs)
-#     return wrapper
-#
-# @promt_decorator
+def main():
+    parser = argparse.ArgumentParser(description="AI Code Assistant")
+    parser.add_argument("user_prompt", type=str, help="Prompt to send to Gemini")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    args = parser.parse_args()
+
+    load_dotenv()
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY environment variable not set")
+
+    client = genai.Client(api_key=api_key)
+    messages = [types.Content(role="user", parts=[types.Part(text=args.user_prompt)])]
+    if args.verbose:
+        print(f"User prompt: {args.user_prompt}\n")
+
+    generate_content(client, messages, args.verbose)
 
 
-def promt(promt: str):
+def generate_content(client, messages, verbose):
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=promt,
+        model=model_name,
+        contents=messages,
+        config=types.GenerateContentConfig(system_instruction=system_prompt),
     )
-    # print(response.usage_metadata)
-    # print(response.text)
-    return response
 
+    if not response.usage_metadata:
+        raise RuntimeError("Gemini API response appears to be malformed")
 
-def printer(input: str, response: GenerateContentResponse):
-    print(f"User prompt: {input}")
-    print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-    print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+    if verbose:
+        print("Prompt tokens:", response.usage_metadata.prompt_token_count)
+        print("Response tokens:", response.usage_metadata.candidates_token_count)
     print("Response:")
     print(response.text)
 
 
-def main():
-    input = "Why is Boot.dev such a great place to learn backend development? Use one paragraph maximum."
-    response = promt(input)
-    printer(input, response)
-
-
 if __name__ == "__main__":
     main()
-
-
-"""
-cache_tokens_details=None
-cached_content_token_count=None
-candidates_token_count=100
-candidates_tokens_details=None
-prompt_token_count=20 
-prompt_tokens_details=[ModalityTokenCount(modality=<MediaModality.TEXT: 'TEXT'>, token_count=20)]
-thoughts_token_count=1108
-tool_use_prompt_token_count=None
-tool_use_prompt_tokens_details=None
-total_token_count=1228
-traffic_type=None
-"""
