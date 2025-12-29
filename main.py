@@ -1,10 +1,14 @@
 import argparse
 import os
 
+from pprint import pprint
+import re
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from config import model_name, system_prompt
+from config import model_name, system_prompt, MAX_ITERS
+from call_functions import available_functions
+from functions.call_function import call_function
 
 
 def main():
@@ -23,14 +27,21 @@ def main():
     if args.verbose:
         print(f"User prompt: {args.user_prompt}\n")
 
-    generate_content(client, messages, args.verbose)
+    for _ in range(MAX_ITERS):
+        response = generate_content(client, messages, args.verbose)
+        if response is not None:
+            print("Response:")
+            print(response)
+            return
 
 
 def generate_content(client, messages, verbose):
     response = client.models.generate_content(
         model=model_name,
         contents=messages,
-        config=types.GenerateContentConfig(system_instruction=system_prompt),
+        config=types.GenerateContentConfig(
+            tools=[available_functions], system_instruction=system_prompt
+        ),
     )
 
     if not response.usage_metadata:
@@ -39,8 +50,31 @@ def generate_content(client, messages, verbose):
     if verbose:
         print("Prompt tokens:", response.usage_metadata.prompt_token_count)
         print("Response tokens:", response.usage_metadata.candidates_token_count)
-    print("Response:")
-    print(response.text)
+
+    if response.candidates:
+        for candidate in response.candidates:
+            if candidate.content:
+                messages.append(candidate.content)
+
+    if not response.function_calls:
+        return response.text
+
+    function_responses = []
+    for function_call in response.function_calls:
+        function_call_result = call_function(function_call)
+        if (
+            not function_call_result.parts
+            or not function_call_result.parts[0].function_response
+            or not function_call_result.parts[0].function_response.response
+        ):
+            raise RuntimeError(f"empty function response for {function_call.name}")
+
+        function_responses.append(function_call_result.parts[0])
+
+        if verbose:
+            print(f"-> {function_call_result.parts[0].function_response.response}")
+
+    messages.append(types.Content(role="user", parts=function_responses))
 
 
 if __name__ == "__main__":

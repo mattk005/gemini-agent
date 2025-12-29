@@ -1,6 +1,25 @@
 import os
-import argparse
 import subprocess
+
+from google.genai import types
+
+schema_run_python_file = types.FunctionDeclaration(
+    name="run_python_file",
+    description="Runs the target python file with the python interperater, returns the return code, stdout and stderr if they exist.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "file_path": types.Schema(
+                type=types.Type.STRING,
+                description="File path to the file to be ran, relative to the working directory",
+            ),
+            "args": types.Schema(
+                type=types.Type.STRING,
+                description="arguments to be passed to the python file. (if it takes any, defaul=None)",
+            ),
+        },
+    ),
+)
 
 
 def run_python_file(working_directory, file_path, args=None):
@@ -15,19 +34,12 @@ def run_python_file(working_directory, file_path, args=None):
         if abs_file_path.split(".")[-1] != "py":
             return f'Error: "{file_path}" is not a Python file'
 
-        # parser = argparse.ArgumentParser(description="Run python file")
-        # parser.add_argument("extra_args", type=str, help="additional arguments")
-        # extra_args = parser.parse_args()
-
         command = ["python", abs_file_path]
         if args:
             command += [args]
-        # command += args.extra_args
-        # print(command)
         foo = subprocess.run(
             command, capture_output=True, cwd=working_directory, text=True, timeout=30
         )
-        # print(foo)
         my_soon_to_be_output_list = []
         if foo.returncode != 0:
             my_soon_to_be_output_list.append(
